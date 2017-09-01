@@ -1,7 +1,7 @@
-c53fb861a54972e0a3eb616a457d33ea *DESCRIPTION
+7ec323ff7df9d73221aa7cb4c722c689 *DESCRIPTION
 0a554ba6b1119ab579ba0cf812295858 *LICENSE
 e1b4afb445fc220c60f785289deff8b3 *NAMESPACE
-dc7cf747ea509c7a516e3bf1b2c5c013 *R/MullerPlot.R
+5520c022bf5d74ff444ac57a606daf06 *R/MullerPlot.R
 1e19df6c11a1ece72018d45b83f3e704 *R/SupplementaryFunctions.R
 fbbc544830746338a98e06c3e8f1e230 *R/example_df-data.R
 f4d43e54304cd9e7c7d49874b0d4521c *R/example_edges-data.R
@@ -11,9 +11,9 @@ b51ca1b32034e00777fca7f7130bd874 *R/example_pop_df-data.R
 6bc15f7b39327ef5eec0caa0930e96b3 *data/example_df.RData
 bfb840890b12acf670047c2379fcee48 *data/example_edges.RData
 50c54fded05de9ec995aedcac1f403e9 *data/example_pop_df.RData
-44ccf83c09df4e81a66743d71e857217 *inst/doc/ggmuller.R
-07fedada7c0b97defc8e164442b08c0e *inst/doc/ggmuller.Rmd
-817ad0c6bce4ca98eff1ed06fc919f11 *inst/doc/ggmuller.html
+001e12c713cb7274a7d17012f46680ec *inst/doc/ggmuller.R
+9a0abc2cd0eee1658a1e402249fe8340 *inst/doc/ggmuller.Rmd
+22cd628fddae127ffabbb09188f2d8c9 *inst/doc/ggmuller.html
 cb3e066030ab1cb8de87b11500c61472 *man/Muller_plot.Rd
 b1d9beb30f591cb538d9b59d84dbd2e9 *man/Muller_pop_plot.Rd
 5e5c79897f9e6cbf8ba79e0e98b8eced *man/add_empty_pop.Rd
@@ -32,4 +32,4 @@ ad81cf88ee1609f18958cfe0bbc16a25 *man/move_down.Rd
 77babb5dec5d43cbc8e2665ef3d0b3e3 *man/move_up.Rd
 6e743c69e6720d7a7fcba6c582e6df8d *man/path_vector.Rd
 fd959ec4894049da9aa2d8aeafa92202 *man/reorder_by_vector.Rd
-07fedada7c0b97defc8e164442b08c0e *vignettes/ggmuller.Rmd
+9a0abc2cd0eee1658a1e402249fe8340 *vignettes/ggmuller.Rmd
