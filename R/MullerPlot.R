@@ -224,8 +224,8 @@ reorder_by_vector <- function(df, vector) {
 #' The function 1) identifies the time points at which new genotypes appear;
 #' 2) copies all the rows of data for these time points; 3) modifies the copied rows by slighlty decreasing
 #' Generation and setting Population of the emerging genotypes to be close to zero;
-#' and then 4) adds the modified rows to the dataframe. This ensures that ggplot doesn't plot blank spaces
-#' where genotypes first emerge.
+#' and then 4) adds the modified rows to the dataframe. This ensures that ggplot plots
+#' genotypes emerging at the points where they are first recorded.
 #'
 #' @param pop_df Dataframe with column names "Generation", "Identity" and "Population"
 #'
@@ -246,10 +246,7 @@ add_start_points <- function(pop_df) {
   delta <- abs(min(1E-2 * min(diff(all_gens_list)), 1E-4 * (max(all_gens_list) - min(all_gens_list))))
   
   # set small initial population size:
-  total_pops <- group_by_(pop_df, ~Generation) %>%
-    summarise_(total_pop = ~sum(Population))
-  min_total_pop <- min(total_pops$total_pop)
-  init_size <- 1E-6 * min_total_pop
+  init_size <- 0
   
   # get reference list of generations at which new genotypes appear:
   min_gen <- min(pop_df$Generation)
@@ -282,12 +279,13 @@ add_start_points <- function(pop_df) {
 }
 
 #' Create a data frame from which to create a Muller plot
+#' 
 #'
 #' @param edges Dataframe comprising an adjacency matrix, or tree of class "phylo"
 #' @param pop_df Dataframe with column names "Generation", "Identity" and "Population"
 #' @param threshold Numeric threshold; genotypes that never become more abundant than this threshold are omitted
-#' @param add_zeroes Logical whether to include rows with Population = 0
-#' @param smooth_start_points Logical whether to replace subpopulations of size zero (at generations > 0) with a very small number for smoother plotting of start points
+#' @param add_zeroes Deprecated (now always TRUE)
+#' @param smooth_start_points Deprecated (now always TRUE)
 #'
 #' @return A dataframe that can be used as input in Muller_plot and Muller_pop_plot.
 #'
@@ -299,9 +297,6 @@ add_start_points <- function(pop_df) {
 #' # but one can choose to omit genotypes with max frequency < threshold:
 #' Muller_df <- get_Muller_df(example_edges, example_pop_df, threshold = 0.005)
 #'
-#' # one can also choose to include rows with Population = 0:
-#' Muller_df <- get_Muller_df(example_edges, example_pop_df, add_zeroes = TRUE, threshold = 0.005)
-#'
 #' # the genotype names can be arbitrary character strings instead of numbers:
 #' example_edges_char <- example_edges
 #' example_edges_char$Identity <- paste0("foo", example_edges_char$Identity, "bar")
@@ -310,7 +305,7 @@ add_start_points <- function(pop_df) {
 #' example_pop_df_char$Identity <- paste0("foo", example_pop_df_char$Identity, "bar")
 #' Muller_df <- get_Muller_df(example_edges_char, example_pop_df_char, threshold = 0.005)
 #'
-#' # the genotype names can also be factors (which is the default for characters in imported data):
+#' # the genotype names can also be factors (which is the default for strings in imported data):
 #' example_edges_char$Identity <- as.factor(example_edges_char$Identity)
 #' example_edges_char$Parent <- as.factor(example_edges_char$Parent)
 #' example_pop_df_char$Identity <- as.factor(example_pop_df_char$Identity)
@@ -319,9 +314,18 @@ add_start_points <- function(pop_df) {
 #' @export
 #' @import dplyr
 #' @importFrom stats na.omit
-get_Muller_df <- function(edges, pop_df, add_zeroes = FALSE, threshold = 0, smooth_start_points = FALSE) {
+get_Muller_df <- function(edges, pop_df, threshold = 0, add_zeroes = NA, smooth_start_points = NA) {
   Population <- NULL # avoid check() note
   Generation <- NULL # avoid check() note
+  
+  if (!missing(add_zeroes)) {
+    warning("argument add_zeroes is deprecated (it is now always TRUE).", 
+    call. = FALSE)
+  }
+  if (!missing(smooth_start_points)) {
+    warning("argument smooth_start_points is deprecated (it is now always TRUE).", 
+    call. = FALSE)
+  }
   
   # check/set column names:
   if(!("Generation" %in% colnames(pop_df)) | !("Identity" %in% colnames(pop_df)) | !("Generation" %in% colnames(pop_df))) 
@@ -337,12 +341,6 @@ get_Muller_df <- function(edges, pop_df, add_zeroes = FALSE, threshold = 0, smoo
   
   # add rows to pop_df to ensure genotype starting points are plotted correctly:
   pop_df <- add_start_points(pop_df)
-  
-  # optionally replace subpopulations of size zero (at generations > 0)
-  # with a very small number for smoother plotting of start points:
-  small_val <- 1E-9 * min(filter(pop_df, Population > 0)$Population)
-  min_gen <- min(pop_df$Generation)
-  if(smooth_start_points) pop_df <-  pop_df %>% mutate(Population = replace(Population, Population == 0 & Generation > min_gen, small_val))
   
   # construct a dataframe with "Age" of each genotype:
   pop_df <- arrange_(pop_df, ~-Population)
@@ -402,9 +400,6 @@ get_Muller_df <- function(edges, pop_df, add_zeroes = FALSE, threshold = 0, smoo
     unlist(as.data.frame(Muller_df %>% filter_(~Generation == max(Generation)) %>% select_(~Group_id)), use.names=FALSE)
     ))
   
-  # optionally remove rows with Population = 0:
-  if(!add_zeroes) Muller_df <- filter_(Muller_df, ~Population > 0)
-  
   return(Muller_df)
 }
 
@@ -447,10 +442,11 @@ Muller_plot <- function(Muller_df, colour_by = NA, palette = NA, add_legend = FA
   }
   if(is.na(colour_by)) colour_by <- "Identity"
   y_factor <- ifelse(pop_plot, "Population", "Frequency")
+  id_list <- sort(unique(select(Muller_df, colour_by))[[1]]) # list of legend entries, omitting NA
   
   ggplot(Muller_df, aes_string(x = "Generation", y = y_factor, group = "Group_id", fill = colour_by, colour = colour_by)) + 
-    geom_area(size = 0.5) + # add lines to conceal the gaps between areas
-    scale_fill_manual(values = palette, name = colour_by) + 
+    geom_area() +
+    scale_fill_manual(values = palette, name = colour_by, breaks = id_list) + 
     scale_color_manual(values = palette) + 
     theme(legend.position = ifelse(add_legend, "right", "none")) +
     guides(linetype=FALSE,color=FALSE) + 
@@ -482,12 +478,6 @@ Muller_plot <- function(Muller_df, colour_by = NA, palette = NA, add_legend = FA
 #' @import dplyr
 #' @import ggplot2
 Muller_pop_plot <- function(Muller_df, colour_by = NA, palette = NA, add_legend = FALSE, xlab = "Generation", ylab = "Population") {
-  long_palette <- c("#8A7C64", "#599861", "#89C5DA", "#DA5724", "#74D944", "#CE50CA", 
-                    "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", "#673770", "#D3D93E", 
-                    "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
-                    "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", 
-                    "#5E738F", "#D1A33D")
-  if(is.na(palette[1])) palette <- c(rep(long_palette, ceiling(length(unique(Muller_df$Identity)) / length(long_palette))))
   
   # add rows for empty space (unless this has been done already):
   if(!"___special_empty" %in% Muller_df$Group_id) Muller_df <- add_empty_pop(Muller_df)

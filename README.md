@@ -1,3 +1,5 @@
+[![CRAN_Status_Badge](http://www.r-pkg.org/badges/version/ggmuller)](https://cran.r-project.org/package=ggmuller)
+
 ggmuller
 ========
 
@@ -5,7 +7,13 @@ Create Muller Plots of Evolutionary Dynamics
 
 ### Installation
 
-To install & load in R with devtools:
+To install the [CRAN version](https://cran.r-project.org/package=ggmuller):
+``` r
+install(ggmuller)
+library(ggmuller)
+```
+
+To install the github version using devtools:
 
 ``` r
 install.packages("devtools")
@@ -20,16 +28,18 @@ library(ggmuller)
 The main functions in `ggmuller` are `get_Muller_df` and `Muller_plot`, which we can run on some data included in the package:
 
 ``` r
-# get data
-Muller_df <- get_Muller_df(example_edges, example_pop_df, threshold = 0.005)
+# reformat data ready for plotting:
+Muller_df <- get_Muller_df(example_edges, example_pop_df)
 
-# generate pretty plot
+# generate the plot:
 Muller_plot(Muller_df)
 ```
 
-### How-to guide with examples
+### How-to guides
 
-For an introduction to how the package works, an overview of its features, and some worked examples, see the blog post on [Visualizing evolutionary dynamics with ggmuller](https://thesefewlines.wordpress.com/2016/08/20/how-to-ggmuller/).
+The best place to start is the [CRAN vignette](https://cran.r-project.org/package=ggmuller/vignettes/ggmuller.html), which includes an overview of features and some worked examples.
+
+An older, slightly different set of instructions can be found in a blog post on [Visualizing evolutionary dynamics with ggmuller](https://thesefewlines.wordpress.com/2016/08/20/how-to-ggmuller/).
 
 ### Version history
 
@@ -43,9 +53,25 @@ For an introduction to how the package works, an overview of its features, and s
 
 0.2.0: New function Muller_pop_plot shows variation in population size as well as frequency (also known as a fish plot).
 
+0.2.1: Correct mistake in calculating population sizes for Muller_pop_plot.
+
+0.2.2: Bug fix for Muller_pop_plot when some subpopulations go extinct.
+
 ### Citation
 
-If you use ggmuller then please ensure your citation includes DOI:10.5281/zenodo.240589.
+To cite ggmuller in publications please use
 
-[![DOI](https://zenodo.org/badge/60275411.svg)](https://zenodo.org/badge/latestdoi/60275411)
+    Robert Noble (2017). ggmuller: Create Muller Plots of Evolutionary Dynamics. R package version 0.2.1. doi:10.5281/zenodo.591304 https://CRAN.R-project.org/package=ggmuller
 
+A BibTeX entry for LaTeX users is
+
+    @Manual{,
+    title = {ggmuller: Create Muller Plots of Evolutionary Dynamics},
+    author = {Robert Noble},
+    year = {2017},
+    note = {R package version 0.2.1},
+    url = {https://CRAN.R-project.org/package=ggmuller},
+    doi = 10.5281/zenodo.591304
+    }
+
+Please amend the version number as appropriate.

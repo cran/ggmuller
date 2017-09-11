@@ -47,10 +47,14 @@ Muller_plot(Muller_df3, colour_by = "Fitness",
  add_legend = TRUE, xlab = "Time", ylab = "Proportion")
 
 ## ------------------------------------------------------------------------
+Muller_df3_censored <- get_Muller_df(edges3, pop3, threshold = 0.1)
+Muller_plot(Muller_df3_censored, add_legend = TRUE)
+
+## ------------------------------------------------------------------------
 library(ggplot2)
 my_palette <- c("grey", "red", "magenta", "orange", "yellow", "blue", "darkcyan")
 ggplot(Muller_df, aes_string(x = "Generation", y = "Frequency", group = "Group_id", fill = "Identity", colour = "Identity")) + 
-	geom_area(size = 0.5) + # add lines to conceal the gaps between areas
+	geom_area() +
 	theme(legend.position = "right") +
 	guides(linetype = FALSE, color = FALSE) + 
 	scale_y_continuous(labels = 25 * (0:4), name = "Percentage") +
@@ -59,13 +63,14 @@ ggplot(Muller_df, aes_string(x = "Generation", y = "Frequency", group = "Group_i
 
 ## ------------------------------------------------------------------------
 Muller_df_pop <- add_empty_pop(Muller_df)
+id_list <- sort(unique(Muller_df_pop$Identity)) # list of legend entries, omitting NA
 ggplot(Muller_df_pop, aes_string(x = "Generation", y = "Population", group = "Group_id", fill = "Identity", colour = "Identity")) + 
-	geom_area(size = 0.5) + # add lines to conceal the gaps between areas
-	theme(legend.position = "right") +
-	guides(linetype = FALSE, color = FALSE) + 
-	scale_fill_manual(name = "Identity", values = my_palette) +
-	scale_color_manual(values = my_palette) +
-	theme_classic()
+  geom_area() +
+  theme(legend.position = "right") +
+  guides(linetype = FALSE, color = FALSE) + 
+  scale_fill_manual(name = "Identity", values = my_palette, breaks = id_list) +
+  scale_color_manual(values = my_palette) +
+  theme_classic()
 
 ## ------------------------------------------------------------------------
 tree <- adj_matrix_to_tree(edges3)
