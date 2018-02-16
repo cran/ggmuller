@@ -39,12 +39,7 @@ Muller_df3 <- get_Muller_df(edges3, pop3)
 Muller_plot(Muller_df3, add_legend = TRUE, xlab = "Time", ylab = "Proportion")
 
 ## ------------------------------------------------------------------------
-library(RColorBrewer)
-num_cols <- length(unique(Muller_df3$Fitness)) + 1
-Muller_df3$Fitness <- as.factor(Muller_df3$Fitness)
-Muller_plot(Muller_df3, colour_by = "Fitness", 
- palette = rev(colorRampPalette(brewer.pal(9, "YlOrRd"))(num_cols)), 
- add_legend = TRUE, xlab = "Time", ylab = "Proportion")
+Muller_plot(Muller_df3, colour_by = "Fitness", add_legend = TRUE)
 
 ## ------------------------------------------------------------------------
 Muller_df3_censored <- get_Muller_df(edges3, pop3, cutoff = 0.2)
