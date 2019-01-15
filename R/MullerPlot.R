@@ -382,6 +382,7 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
 get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, threshold = NA, add_zeroes = NA, smooth_start_points = NA) {
   Population <- NULL # avoid check() note
   Generation <- NULL # avoid check() note
+  Identity <- NULL # avoid check() note
   
   original_colname <- "Generation"
   # rename Time column (original name will be restored later):
@@ -393,6 +394,11 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   # add missing population values:
   if(dim(pop_df)[1] != length(unique(pop_df$Identity)) * length(unique(pop_df$Generation))) {
     added_rows <- expand.grid(Identity = unique(pop_df$Identity), Generation = unique(pop_df$Generation))
+    added_props <- group_by(pop_df, Identity) %>% 
+      slice(1) %>% 
+      ungroup() %>% 
+      select(-one_of("Generation", "Population"))
+    added_rows <- merge(added_rows, added_props, all = TRUE)
     pop_df <- merge(added_rows, pop_df, all = TRUE)
     pop_df[is.na(pop_df$Population), "Population"] <- 0
     pop_df <- arrange_(pop_df, ~Generation)
@@ -417,14 +423,27 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   # check/set column names:
   if(!("Generation" %in% colnames(pop_df)) | !("Identity" %in% colnames(pop_df)) | !("Generation" %in% colnames(pop_df))) 
     stop("colnames(pop_df) must contain Generation (or Time), Identity and Population")
-  if("phylo" %in% class(edges)) {
-    collapse.singles(edges)
-    edges <- edges$edge
+  
+  if(!is.na(edges)[1]) {
+    set1 <- unique(pop_df$Identity)
+    set2 <- unique(edges$Identity)
+    set3 <- unique(edges$Parent)
+    # check that pop_df and edges have compatible Identity values:
+    if(length(setdiff(set1, set2)) != 1) stop("Identity values in edges must match Identity values in pop_df, excluding the original genotype (which has no parent)")
+    # check that Parent and Identity values in edges are consistent:
+    if(length(setdiff(set3, set2)) != 1) stop("Parent values in edges must also appear as Identity values in edges, excluding the original genotype (which has no parent)")
   }
-  edges <- na.omit(edges) # remove any rows containing NA
-  colnames(edges) <- c("Parent", "Identity")
-  if(is.factor(edges$Parent)) edges$Parent <- levels(edges$Parent)[edges$Parent]
-  if(is.factor(edges$Identity)) edges$Identity <- levels(edges$Identity)[edges$Identity]
+  
+  if(!is.na(edges)[1]) {
+    if("phylo" %in% class(edges)) {
+      collapse.singles(edges)
+      edges <- edges$edge
+      }
+    edges <- na.omit(edges) # remove any rows containing NA
+    colnames(edges) <- c("Parent", "Identity")
+    if(is.factor(edges$Parent)) edges$Parent <- levels(edges$Parent)[edges$Parent]
+    if(is.factor(edges$Identity)) edges$Identity <- levels(edges$Identity)[edges$Identity]
+  }
   
   # add rows to pop_df to ensure genotype starting points are plotted correctly:
   pop_df <- add_start_points(pop_df, start_positions)
@@ -449,27 +468,30 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   pop_df$Population <- pop_df$Population / 2 # because of the duplication
   pop_df$Frequency[is.nan(pop_df$Frequency)] <- 0
   
-  # replace each genotype name in adjacency matrix with corresponding Age:
-  edges <- filter_(edges, ~Identity %in% lookup$Identity)
-  edges <- left_join(edges, lookup, by = "Identity")
-  edges <- select_(edges, ~-Identity)
-  colnames(edges) <- c("Parent", "Identity")
-  edges <- arrange_(edges, ~Identity)
-  colnames(lookup)[1] <- "Parent"
-  edges <- left_join(edges, lookup, by = "Parent")
-  edges$Parent <- edges$Age
-  edges <- select_(edges, ~-Age)
-  
   # duplicate rows:
   Muller_df <- rbind(pop_df, pop_df)
   Muller_df <- arrange_(Muller_df, ~Generation)
   
-  # get the path:
-  path <- path_vector(edges)
-  path <- rev(path) # apparently, the convention for Muller plots to have earliest-arriving genotypes plotted nearest the top
-  
-  # replace each Age in the path with corresponding genotype name:
-  path <- left_join(data.frame(Age = path), lookup, by = "Age")$Parent
+  if(!is.na(edges)[1]) {
+    # replace each genotype name in adjacency matrix with corresponding Age:
+    edges <- filter_(edges, ~Identity %in% lookup$Identity)
+    edges <- left_join(edges, lookup, by = "Identity")
+    edges <- select_(edges, ~-Identity)
+    colnames(edges) <- c("Parent", "Identity")
+    edges <- arrange_(edges, ~Identity)
+    colnames(lookup)[1] <- "Parent"
+    edges <- left_join(edges, lookup, by = "Parent")
+    edges$Parent <- edges$Age
+    edges <- select_(edges, ~-Age)
+    
+    # get the path:
+    path <- path_vector(edges)
+    path <- rev(path) # apparently, the convention for Muller plots to have earliest-arriving genotypes plotted nearest the top
+    
+    # replace each Age in the path with corresponding genotype name:
+    path <- left_join(data.frame(Age = path), lookup, by = "Age")$Parent
+  }
+  else path <- c(unique(pop_df$Identity)[1], unique(pop_df$Identity)[1]) # if there's only one genotype
   
   # rearrange the population data according to the path:
   Muller_df <- reorder_by_vector(Muller_df, path)
@@ -490,7 +512,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   # restore original time column name:
   colnames(Muller_df)[colnames(Muller_df) == "Generation"] <- original_colname
   
-  return(Muller_df)
+  return(as.data.frame(Muller_df))
 }
 
 #' Draw a Muller plot of frequencies using ggplot2
@@ -502,6 +524,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
 #' @param xlab Label of x axis
 #' @param ylab Label of y axis
 #' @param pop_plot Logical for whether this function is being called from Muller_pop_plot (otherwise should be FALSE)
+#' @param conceal_edges Whether try to conceal the edges between polygons (usually unnecessary or undesirable)
 #'
 #' @return None
 #' 
@@ -524,7 +547,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
 #' @import dplyr
 #' @import ggplot2
 #' @importFrom grDevices col2rgb
-Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_legend = FALSE, xlab = NA, ylab = "Frequency", pop_plot = FALSE) {
+Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_legend = FALSE, xlab = NA, ylab = "Frequency", pop_plot = FALSE, conceal_edges = FALSE) {
   if(!pop_plot & "___special_empty" %in% Muller_df$Group_id) warning("Dataframe is set up for Muller_pop_plot. Use Muller_pop_plot to plot populations rather than frequencies.")
   
   y_factor <- ifelse(pop_plot, "Population", "Frequency")
@@ -539,17 +562,20 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
     }
     else {
       long_palette <- c("#8A7C64", "#599861", "#89C5DA", "#DA5724", "#74D944", "#CE50CA", 
-                      "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", "#673770", "#D3D93E", 
-                      "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
-                      "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", 
-                      "#5E738F", "#D1A33D")
+                        "#3F4921", "#C0717C", "#CBD588", "#5F7FC7", "#673770", "#D3D93E", 
+                        "#38333E", "#508578", "#D7C1B1", "#689030", "#AD6F3B", "#CD9BCD", 
+                        "#D14285", "#6DDE88", "#652926", "#7FDCC0", "#C84248", "#8569D5", 
+                        "#5E738F", "#D1A33D")
       palette <- rep(long_palette, ceiling(length(unique(Muller_df$Identity)) / length(long_palette)))
     }
   }
   # test whether palette is a vector of colours; if not then we'll assume it's the name of a predefined palette:
   palette_named <- !min(sapply(palette, function(X) tryCatch(is.matrix(col2rgb(X)), error = function(e) FALSE)))
   
-  gg <- ggplot(Muller_df, aes_string(x = x_factor, y = y_factor, group = "Group_id", fill = colour_by, colour = colour_by)) + 
+  if(conceal_edges) gg <- ggplot(Muller_df, aes_string(x = x_factor, y = y_factor, group = "Group_id", fill = colour_by, colour = colour_by))
+  else gg <- ggplot(Muller_df, aes_string(x = x_factor, y = y_factor, group = "Group_id", fill = colour_by))
+  
+  gg <- gg + 
     geom_area() +
     theme(legend.position = ifelse(add_legend, "right", "none")) +
     guides(linetype = FALSE, color = FALSE) + 
@@ -587,6 +613,7 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
 #' @param add_legend Logical whether to show legend
 #' @param xlab Label of x axis
 #' @param ylab Label of y axis
+#' @param conceal_edges Whether try to conceal the edges between polygons (usually unnecessary or undesirable)
 #'
 #' @return None
 #' 
@@ -600,12 +627,12 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
 #' @export
 #' @import dplyr
 #' @import ggplot2
-Muller_pop_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_legend = FALSE, xlab = NA, ylab = "Population") {
+Muller_pop_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_legend = FALSE, xlab = NA, ylab = "Population", conceal_edges = FALSE) {
   
   # add rows for empty space (unless this has been done already):
   if(!"___special_empty" %in% Muller_df$Group_id) Muller_df <- add_empty_pop(Muller_df)
   
-  Muller_plot(Muller_df, colour_by = colour_by, palette = palette, add_legend = add_legend, pop_plot = TRUE, xlab = xlab, ylab = ylab)
+  Muller_plot(Muller_df, colour_by = colour_by, palette = palette, add_legend = add_legend, pop_plot = TRUE, xlab = xlab, ylab = ylab, conceal_edges = conceal_edges)
 }
 
 #' Modify a dataframe to enable plotting of populations instead of frequencies
