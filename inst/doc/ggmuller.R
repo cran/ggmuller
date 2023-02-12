@@ -1,18 +1,18 @@
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(ggmuller)
 Muller_df <- get_Muller_df(example_edges, example_pop_df)
 Muller_plot(Muller_df)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_df <- get_Muller_df(example_edges, example_pop_df)
 Muller_pop_plot(Muller_df)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 edges3 <- data.frame(Parent = paste0("clone_", 
  LETTERS[c(rep(1:3, each = 2), 2, 5)]), 
  Identity = paste0("clone_", LETTERS[2:9]))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 # a function for generating exponential growth curves:
 pop_seq <- function(gens, lambda, start_gen) c(rep(0, start_gen),
                                                exp(lambda * gens[0:(length(gens) - start_gen)]))
@@ -32,20 +32,20 @@ pop3 <- data.frame(Generation = rep(gens, 9),
  pop_seq(gens, fitnesses[9]*lambda, 60)),
  Fitness = rep(fitnesses, each = length(gens)))
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_df3 <- get_Muller_df(edges3, pop3)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_plot(Muller_df3, add_legend = TRUE, xlab = "Time", ylab = "Proportion")
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_plot(Muller_df3, colour_by = "Fitness", add_legend = TRUE)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_df3_censored <- get_Muller_df(edges3, pop3, cutoff = 0.2)
 Muller_plot(Muller_df3_censored, add_legend = TRUE)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(ggplot2)
 my_palette <- c("grey", "red", "magenta", "orange", "yellow", "blue", "darkcyan")
 ggplot(Muller_df, aes_string(x = "Generation", y = "Frequency", group = "Group_id", fill = "Identity", colour = "Identity")) + 
@@ -56,7 +56,7 @@ ggplot(Muller_df, aes_string(x = "Generation", y = "Frequency", group = "Group_i
 	scale_fill_manual(name = "Identity", values = my_palette) +
 	scale_color_manual(values = my_palette)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 Muller_df_pop <- add_empty_pop(Muller_df)
 id_list <- sort(unique(Muller_df_pop$Identity)) # list of legend entries, omitting NA
 ggplot(Muller_df_pop, aes_string(x = "Generation", y = "Population", group = "Group_id", fill = "Identity", colour = "Identity")) + 
@@ -67,10 +67,10 @@ ggplot(Muller_df_pop, aes_string(x = "Generation", y = "Population", group = "Gr
   scale_color_manual(values = my_palette) +
   theme_classic()
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 tree <- adj_matrix_to_tree(edges3)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(ape)
 tree$tip.label <- 1:length(tree$tip.label) # optional
 tree$node.label <- (length(tree$tip.label) + 1):10 # optional

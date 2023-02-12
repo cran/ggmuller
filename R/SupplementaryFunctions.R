@@ -38,6 +38,7 @@ branch_singles <- function(edges) {
 #' @seealso \code{\link{get_population_df}}
 #'
 #' @examples
+#' \dontrun{
 #' edges <- get_edges(example_df)
 #' 
 #' # extract the adjacency matrix from the data frame:
@@ -54,7 +55,8 @@ branch_singles <- function(edges) {
 #' Muller_plot(Muller_df, colour_by = "RelativeFitness", 
 #'             palette = rev(colorRampPalette(brewer.pal(9, "YlOrRd"))(num_cols)), 
 #'             add_legend = TRUE)
-#'
+#' }
+#' 
 #' @export
 #' @import dplyr
 get_edges <- function(df, generation = NA) {
@@ -78,6 +80,7 @@ get_edges <- function(df, generation = NA) {
 #' @seealso \code{\link{get_edges}}
 #'
 #' @examples
+#' \dontrun{
 #' # extract the adjacency matrix from the data frame:
 #' edges <- get_edges(example_df)
 #' 
@@ -95,6 +98,7 @@ get_edges <- function(df, generation = NA) {
 #' Muller_plot(Muller_df, colour_by = "RelativeFitness", 
 #'             palette = rev(colorRampPalette(brewer.pal(9, "YlOrRd"))(num_cols)), 
 #'             add_legend = TRUE)
+#' }
 #'
 #' @export
 #' @import dplyr
@@ -110,6 +114,14 @@ get_population_df <- function(df) {
   # check column names:
   if(!("Generation" %in% colnames(df)) | !("Identity" %in% colnames(df)) | !("Population" %in% colnames(df))) 
     stop("colnames(df) must contain Generation (or Time), Identity and Population")
+  
+  l1 <- length(unique(df[, c('Generation', 'Population')]))
+  l2 <- length(df[, c('Generation', 'Population')])
+  if(l2 - l1 == 1) {
+    stop("One Generation value is duplicated; each row must have a unique Generation value")
+  } else if(l2 - l1 > 1) {
+    stop(paste0(l2 - l1, " Generation values are duplicated; each row must have a unique Generation value"))
+  }
   
   . <- NULL # avoid check() note
   Population <- NULL # avoid check() note
@@ -141,13 +153,12 @@ get_population_df <- function(df) {
 #'
 #' @examples
 #' edges1 <- data.frame(Parent = c(1,1,1,3,3), Identity = 2:6)
-#' require(ape)
 #' tree <- adj_matrix_to_tree(edges1)
-#' plot(tree)
+#' class(tree)
 #'
 #' @export
 #' @import dplyr
-#' @import ape
+#' @importFrom ape reorder.phylo
 adj_matrix_to_tree <- function(edges) {
   # initialise:
   edges <- as.data.frame(edges)

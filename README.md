@@ -9,7 +9,7 @@ Create Muller Plots of Evolutionary Dynamics
 
 To install the [CRAN version](https://cran.r-project.org/package=ggmuller):
 ``` r
-install(ggmuller)
+install.packages("ggmuller")
 library(ggmuller)
 ```
 
@@ -42,6 +42,10 @@ The best place to start is the [CRAN vignette](https://cran.r-project.org/packag
 An older, slightly different set of instructions can be found in a blog post on [Visualizing evolutionary dynamics with ggmuller](https://thesefewlines.wordpress.com/2016/08/20/how-to-ggmuller/).
 
 ### Version history
+
+0.5.6: Avoid loading or importing ape package, to avoid namespace conflict between ape and dplyr.
+
+0.5.5: Optional removal of rare types is now much more efficient for large data sets.
 
 0.5.4: Fix a rare bug; add tip labels to trees.
 

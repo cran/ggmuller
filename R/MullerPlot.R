@@ -277,7 +277,7 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
   delta <- abs(min(1E-2 * min(diff(all_gens_list)), 1E-4 * (max(all_gens_list) - min(all_gens_list)), 0.5))
   start_positions <- max(start_positions, delta)
   start_positions <- min(start_positions, 1 - delta)
-    
+  
   # set small initial population size:
   init_size <- 0
   
@@ -316,7 +316,7 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
   first_gens$Generation <- first_gens$start_time - start_positions * (first_gens$start_time - sapply(first_gens$start_time, lag_gens))
   # set small initial populations in reference list:
   first_gens$Population2 <- init_size
-
+  
   # replace initial populations in the dataframe with values from reference list:
   pop_df <- merge(pop_df, first_gens, all.x = TRUE)
   pop_df$Population <- ifelse(is.na(pop_df$Population2), pop_df$Population, pop_df$Population2)
@@ -324,7 +324,7 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
   
   # restore original time column name:
   colnames(pop_df)[colnames(pop_df) == "Generation"] <- original_colname
-
+  
   return(pop_df)
 }
 
@@ -379,16 +379,71 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
 #' @export
 #' @import dplyr
 #' @importFrom stats na.omit
+#' @importFrom ape collapse.singles
 get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, threshold = NA, add_zeroes = NA, smooth_start_points = NA) {
   Population <- NULL # avoid check() note
   Generation <- NULL # avoid check() note
   Identity <- NULL # avoid check() note
+  Freq <- NULL # avoid check() note
+  Parent <- NULL # avoid check() note
   
   original_colname <- "Generation"
   # rename Time column (original name will be restored later):
   if("Time" %in% colnames(pop_df) && !("Generation" %in% colnames(pop_df))) {
     colnames(pop_df)[colnames(pop_df) == "Time"] <- "Generation"
     original_colname <- "Time"
+  }
+  
+  if (!missing(add_zeroes)) {
+    warning("argument add_zeroes is deprecated (it is now always TRUE).", 
+            call. = FALSE)
+  }
+  if (!missing(smooth_start_points)) {
+    warning("argument smooth_start_points is deprecated (it is now always TRUE).", 
+            call. = FALSE)
+  }
+  if (!missing(threshold)) {
+    warning("argument threshold is deprecated (use cutoff instead, noting that genotypes whose abundance never exceeds the cutoff value are removed, 
+            whereas previously genotypes whose abundance never exceeded *twice* the threshold value were removed).", 
+            call. = FALSE)
+    if (missing(cutoff)) cutoff <- threshold * 2
+  }
+  
+  # check/set column names:
+  if(!("Generation" %in% colnames(pop_df)) | !("Identity" %in% colnames(pop_df)) | !("Population" %in% colnames(pop_df))) 
+    stop("colnames(pop_df) must contain Generation (or Time), Identity and Population")
+  
+  # filter for frequencies above cutoff:
+  if(cutoff > 0) {
+    
+    if(!"Parent" %in% colnames(pop_df)) pop_df <- left_join(pop_df, edges, by = "Identity")
+    
+    pop_df <- pop_df %>% group_by(Generation) %>% 
+      mutate(Freq = Population / sum(Population)) %>% 
+      ungroup()
+    biglist <- list()
+    
+    big <- group_by(pop_df, Identity) %>% 
+      filter(max(Freq) > cutoff, Generation == max(Generation)) %>% 
+      select(Identity) %>% 
+      ungroup()
+    biglist[[1]] <- pull(unique(big))
+    counter <- 1
+    
+    while(TRUE) {
+      counter <- counter + 1
+      big <- filter(pop_df, Identity %in% biglist[[counter - 1]]) %>% 
+        select(Parent)
+      biglist[[counter]] <- pull(unique(big))
+      if(identical(biglist[[counter]], biglist[[counter - 1]])) break
+      if(counter > 1000) stop("error in attempting to remove rare types (try larger cutoff value?)")
+    }
+    
+    to_include <- unique(unlist(biglist))
+    
+    pop_df <- filter(pop_df, Identity %in% to_include) %>% 
+      select(-Freq, -Parent)
+    edges <- filter(edges, Identity %in% to_include)
   }
   
   # add missing population values:
@@ -405,25 +460,6 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
     warning("missing population sizes replaced by zeroes")
   }
   
-  if (!missing(add_zeroes)) {
-    warning("argument add_zeroes is deprecated (it is now always TRUE).", 
-    call. = FALSE)
-  }
-  if (!missing(smooth_start_points)) {
-    warning("argument smooth_start_points is deprecated (it is now always TRUE).", 
-    call. = FALSE)
-  }
-  if (!missing(threshold)) {
-    warning("argument threshold is deprecated (use cutoff instead, noting that genotypes whose abundance never exceeds the cutoff value are removed, 
-            whereas previously genotypes whose abundance never exceeded *twice* the threshold value were removed).", 
-            call. = FALSE)
-    if (missing(cutoff)) cutoff <- threshold * 2
-  }
-  
-  # check/set column names:
-  if(!("Generation" %in% colnames(pop_df)) | !("Identity" %in% colnames(pop_df)) | !("Generation" %in% colnames(pop_df))) 
-    stop("colnames(pop_df) must contain Generation (or Time), Identity and Population")
-  
   if(!is.na(edges)[1]) {
     set1 <- unique(pop_df$Identity)
     set2 <- unique(edges$Identity)
@@ -438,7 +474,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
     if("phylo" %in% class(edges)) {
       collapse.singles(edges)
       edges <- edges$edge
-      }
+    }
     edges <- na.omit(edges) # remove any rows containing NA
     colnames(edges) <- c("Parent", "Identity")
     if(is.factor(edges$Parent)) edges$Parent <- levels(edges$Parent)[edges$Parent]
@@ -496,18 +532,10 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   # rearrange the population data according to the path:
   Muller_df <- reorder_by_vector(Muller_df, path)
   
-  # optionally remove rare genotypes, and recalculate frequencies:
-  if(cutoff > 0) {
-    Muller_df <- Muller_df %>% group_by_(~Identity) %>% 
-      filter_(~max(Frequency) >= cutoff / 2)
-    Muller_df <- Muller_df %>% group_by_(~Generation) %>% 
-      mutate(Frequency = Population / sum(Population)) %>% 
-      ungroup()
-  }
   # the following adjusts for ggplot2 v.2.2.0, which (unlike v.2.1.0) stacks areas in order of their factor levels
   Muller_df$Group_id <- factor(Muller_df$Group_id, levels = rev(
     unlist(as.data.frame(Muller_df %>% filter_(~Generation == max(Generation)) %>% select_(~Group_id)), use.names=FALSE)
-    ))
+  ))
   
   # restore original time column name:
   colnames(Muller_df)[colnames(Muller_df) == "Generation"] <- original_colname
@@ -556,7 +584,7 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
   if(is.na(xlab)) xlab <- x_factor
   direction <- 1
   if(is.na(palette[1])) {
-    if(is.numeric(Muller_df[ , colour_by])) {
+    if(is.numeric(pull(Muller_df, colour_by))) {
       palette <- "RdBu"
       direction <- -1
     }
@@ -582,7 +610,7 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
     scale_x_continuous(name = xlab) + 
     scale_y_continuous(name = ylab)
   
-  if(is.numeric(Muller_df[ , colour_by])) {
+  if(is.numeric(pull(Muller_df, colour_by))) {
     gg <- gg + 
       scale_fill_distiller(palette = palette, direction = direction, name = colour_by) + 
       scale_color_distiller(palette = palette, direction = direction)
