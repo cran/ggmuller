@@ -19,7 +19,7 @@
 #' @import dplyr
 move_down <- function(edges, parent) {
   if(!(parent %in% edges$Identity) & !(parent %in% edges$Parent)) stop("Invalid parent.")
-  daughters <- filter_(edges, ~Parent == parent)$Identity
+  daughters <- filter(edges, .data$Parent == parent)$Identity
   if(length(daughters) == 0) return(parent) # if it is not a parent then don't move
   if(is.factor(daughters)) daughters <- levels(daughters)[daughters]
   return(sort(daughters)[1])
@@ -46,9 +46,9 @@ move_down <- function(edges, parent) {
 #' @import dplyr
 move_right <- function(edges, identity) {
   if(!(identity %in% edges$Identity) & !(identity %in% edges$Parent)) stop("Invalid identity.")
-  parent <- filter_(edges, ~Identity == identity)$Parent
+  parent <- filter(edges, .data$Identity == identity)$Parent
   if(length(parent) == 0) return(identity) # if it is the initial genotype then don't move
-  siblings <- sort(filter_(edges, ~Parent == parent)$Identity)
+  siblings <- sort(filter(edges, .data$Parent == parent)$Identity)
   siblings <- siblings[which(siblings == identity) + 1]
   if(length(siblings) == 0) return(identity) # if it is the initial genotype then don't move
   if(is.na(siblings)) return(identity) # if it is the initial genotype then don't move
@@ -77,7 +77,7 @@ move_right <- function(edges, identity) {
 #' @import dplyr
 move_up <- function(edges, identity) {
   if(!(identity %in% edges$Identity) & !(identity %in% edges$Parent)) stop("Invalid identity.")
-  parent <- filter_(edges, ~Identity == identity)$Parent
+  parent <- filter(edges, .data$Identity == identity)$Parent
   if(length(parent) == 0) return(identity) # if it is the initial genotype then don't move
   if(is.factor(parent)) parent <- levels(parent)[parent]
   return(parent)
@@ -100,7 +100,7 @@ move_up <- function(edges, identity) {
 #' @export
 #' @import dplyr
 find_start_node <- function(edges) {
-  start <- sort(edges$Parent)[1] # reasonable guess
+  start <- edges$Parent[1] # reasonable guess
   if(is.factor(start)) start <- levels(start)[start]
   repeat {
     if(move_up(edges, start) == start) break
@@ -154,6 +154,111 @@ path_vector <- function(edges) {
   return(path)
 }
 
+#' Add a row to the edges list to represent the root node (if not already present).
+#' @param tree Dataframe comprising an adjacency matrix, with column names "Parent" and "Identity"
+#'
+#' @return The same dataframe including a row representing the root node.
+#' 
+#' @author Rob Noble, \email{robjohnnoble@gmail.com}
+#' 
+#' @examples
+#' tree1 <- data.frame(Parent = c(1,1,1,2,3,4), 
+#'                     Identity = 2:7)
+#' add_root_row(tree1)
+#'
+#' @export
+add_root_row <- function(tree) {
+  start <- setdiff(tree$Parent, tree$Identity)
+  if(length(start) > 1) stop("Input dataframe is missing one or more rows")
+  if(length(start) > 0) { # add row for root node
+    if("Population" %in% colnames(tree)) {
+      root_row <- data.frame(Parent = start, Identity = start, Population = 0)
+      message("Assigning Population = 0 to the root node")
+    }
+    else root_row <- data.frame(Parent = start, Identity = start)
+    tree <- rbind(root_row, tree)
+  }
+  return(tree)
+}
+
+#' Get adjacency list of a tree.
+#' @param tree Dataframe comprising an adjacency matrix, with column names "Parent" and "Identity"
+#'
+#' @return The adjacency list.
+#' 
+#' @author Rob Noble, \email{robjohnnoble@gmail.com}
+#' 
+#' @examples
+#' tree1 <- data.frame(Parent = c(1,1,1,1,2,3,4), 
+#'                     Identity = 1:7, 
+#'                     Population = c(1, rep(5, 6)))
+#' get_Adj(tree1)
+#'
+#' @export
+get_Adj <- function(tree) {
+  n<-length(tree$Identity)
+  Adj <- vector(mode = "list", length = n)
+  for (i in 1:n) if(tree$Parent[i] != tree$Identity[i]) {
+    p <- which(tree$Identity == tree$Parent[i])
+    Adj[[p]] <- append(Adj[[p]], i)
+  }
+  return(Adj)
+}
+
+#' Faster way to record a path through all nodes of an adjacency matrix
+#'
+#' Nodes are traversed in the order that they should be stacked in a Muller plot. 
+#' Each node appears exactly twice.
+#'
+#' @param tree Dataframe comprising an adjacency matrix, with column names "Parent" and "Identity"
+#' @param i Current node
+#' @param Adj Adjacency matrix
+#' @param Col Node label
+#' @param is_leaf Label whether node is a leaf
+#' @param path The path vector so far
+#'
+#' @return A list, including a vector specifying the path.
+#' 
+#' @author Rob Noble, \email{robjohnnoble@gmail.com}
+#' 
+#' @examples
+#' edges1 <- data.frame(Parent = c(1,1,1,3,3), Identity = 2:6)
+#' path_vector_new(edges1)$path
+#'
+#' @export
+#' @import dplyr
+path_vector_new <- function(tree,i=NULL,Adj=NULL,Col=NULL,is_leaf=NULL,path=NULL){
+  tree <- add_root_row(tree)
+  n<-length(tree$Identity)
+  if(is.null(Adj)) Adj <- get_Adj(tree)
+  if(is.null(i)) {
+    i <- which(tree$Identity == find_start_node(tree[,1:2]))
+    path <- vector()
+  }
+  path <- c(path, i)
+  if(is.null(Col)) {
+    Col <- rep("w",n)
+    names(Col) <- unique(tree$Identity)
+  }
+  if(is.null(is_leaf)) {
+    is_leaf <- rep(FALSE, n)
+    names(is_leaf) <- unique(tree$Identity)
+  }
+  if(is.null(Adj[[i]])) is_leaf[i] <- TRUE
+  for (j in Adj[[i]]){
+    if (Col[j] == "w"){
+      L <- path_vector_new(tree,j,Adj,Col,is_leaf,path)
+      path <- L$path
+      Col<- L$colour
+      is_leaf <- L$is_leaf
+      path <- c(path, j)
+    }
+  }
+  Col[i] <- "b"
+  if(i == path[1]) path <- c(path, i)
+  return(list("colour"=Col,"is_leaf"=is_leaf,"path"=path))
+}
+
 #' Reorder a Muller plot dataframe by a vector
 #'
 #' @param df Dataframe with column names "Identity", "Parent", and either "Generation" or "Time", in which each Identity appears exactly twice
@@ -162,7 +267,7 @@ path_vector <- function(edges) {
 #' @return The reordered dataframe.
 #'
 #' @author Rob Noble, \email{robjohnnoble@gmail.com}
-#' @seealso \code{\link{path_vector}}
+#' @seealso \code{\link{path_vector_new}}
 #'
 #' @examples
 #' df <- data.frame(Generation = c(rep(0, 6), rep(1, 6)), 
@@ -171,7 +276,7 @@ path_vector <- function(edges) {
 #' require(dplyr)
 #' df <- arrange(df, Generation) # put in chronological order
 #' edges1 <- data.frame(Parent = c(1,1,1,3,3), Identity = 2:6) # adjacency matrix
-#' path <- path_vector(edges1) # path through the adjacency matrix
+#' path <- path_vector_new(edges1)$path # path through the adjacency matrix
 #' reorder_by_vector(df, path)
 #'
 #' @export
@@ -283,11 +388,11 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
   
   # get reference list of generations at which new genotypes appear (and previous generations):
   min_gen <- min(pop_df$Generation)
-  first_gens <- group_by_(pop_df, ~Identity) %>%
-    filter_(~max(Population) > 0) %>% 
-    summarise_(start_time = ~min(Generation[which(Population > 0)]), 
-               previous_time = ~lag(Generation)[min(which(Population > 0))]) %>%
-    filter_(~start_time > min_gen) %>%
+  first_gens <- group_by(pop_df, .data$Identity) %>%
+    filter(max(.data$Population) > 0) %>%
+    summarise(start_time = min(.data$Generation[which(.data$Population > 0)]),
+               previous_time = lag(.data$Generation)[min(which(.data$Population > 0))]) %>%
+    filter(.data$start_time > min_gen) %>%
     ungroup()
   
   # if all genotypes appear at the first time point then don't make any changes:
@@ -302,15 +407,15 @@ add_start_points <- function(pop_df, start_positions = 0.5) {
   
   # copy all rows for generations at which new genotypes appear:
   gens_list <- unique(first_gens$start_time)
-  new_rows <- filter_(pop_df, ~Generation %in% gens_list)
-  prev_rows <- filter_(pop_df, ~Generation %in% sapply(gens_list, lag_gens))
+  new_rows <- filter(pop_df, .data$Generation %in% gens_list)
+  prev_rows <- filter(pop_df, .data$Generation %in% sapply(gens_list, lag_gens))
   # adjust generations of copied rows:
   new_rows$Generation <- new_rows$Generation - start_positions * (new_rows$Generation - sapply(new_rows$Generation, lag_gens))
   # adjust populations of copied rows:
   new_rows$Population <- (1 - start_positions) * new_rows$Population + start_positions * prev_rows$Population
   # add the copied rows to the dataframe:
   pop_df <- bind_rows(pop_df, new_rows) %>%
-    arrange_(~Generation, ~Identity)
+    arrange(.data$Generation, .data$Identity)
   
   # adjust generations in reference list:
   first_gens$Generation <- first_gens$start_time - start_positions * (first_gens$start_time - sapply(first_gens$start_time, lag_gens))
@@ -456,11 +561,13 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
     added_rows <- merge(added_rows, added_props, all = TRUE)
     pop_df <- merge(added_rows, pop_df, all = TRUE)
     pop_df[is.na(pop_df$Population), "Population"] <- 0
-    pop_df <- arrange_(pop_df, ~Generation)
+    pop_df <- arrange(pop_df, .data$Generation)
     warning("missing population sizes replaced by zeroes")
   }
   
   if(!is.na(edges)[1]) {
+    # if the columns of the adjacency matrix are the wrong way round then switch them:
+    if(identical(colnames(edges), c("Identity", "Parent"))) edges <- edges[, 2:1]
     set1 <- unique(pop_df$Identity)
     set2 <- unique(edges$Identity)
     set3 <- unique(edges$Parent)
@@ -485,43 +592,43 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   pop_df <- add_start_points(pop_df, start_positions)
   
   # construct a dataframe with "Age" of each genotype:
-  pop_df <- arrange_(pop_df, ~-Population)
-  pop_df <- arrange_(pop_df, ~Generation)
-  lookup <- group_by_(pop_df, ~Identity) %>% 
-    filter_(~Population > 0 | Generation == max(Generation)) %>% 
-    slice(1) %>% 
-    arrange_(~Generation) %>% 
+  pop_df <- arrange(pop_df, desc(.data$Population))
+  pop_df <- arrange(pop_df, .data$Generation)
+  lookup <- group_by(pop_df, .data$Identity) %>%
+    filter(.data$Population > 0 | .data$Generation == max(.data$Generation)) %>%
+    slice(1) %>%
+    arrange(.data$Generation) %>%
     ungroup()
-  lookup <- mutate(lookup, Age = 1:dim(lookup)[1]) %>% 
-    select_(~-c(Generation, Population))
+  lookup <- mutate(lookup, Age = 1:dim(lookup)[1]) %>%
+    select(-c("Generation", "Population"))
   if(is.factor(lookup$Identity)) lookup$Identity <- levels(lookup$Identity)[lookup$Identity]
-  lookup <- select_(lookup, ~c(Identity, Age))
+  lookup <- select(lookup, c("Identity", "Age"))
   
   # add semi-frequencies:
-  pop_df <- pop_df %>% group_by_(~Generation) %>% 
-    mutate(Frequency = (Population / sum(Population)) / 2) %>%
+  pop_df <- pop_df %>% group_by(.data$Generation) %>%
+    mutate(Frequency = (.data$Population / sum(.data$Population)) / 2) %>%
     ungroup()
   pop_df$Population <- pop_df$Population / 2 # because of the duplication
   pop_df$Frequency[is.nan(pop_df$Frequency)] <- 0
-  
+
   # duplicate rows:
   Muller_df <- rbind(pop_df, pop_df)
-  Muller_df <- arrange_(Muller_df, ~Generation)
-  
+  Muller_df <- arrange(Muller_df, .data$Generation)
+
   if(!is.na(edges)[1]) {
     # replace each genotype name in adjacency matrix with corresponding Age:
-    edges <- filter_(edges, ~Identity %in% lookup$Identity)
+    edges <- filter(edges, .data$Identity %in% lookup$Identity)
     edges <- left_join(edges, lookup, by = "Identity")
-    edges <- select_(edges, ~-Identity)
+    edges <- select(edges, -"Identity")
     colnames(edges) <- c("Parent", "Identity")
-    edges <- arrange_(edges, ~Identity)
+    edges <- arrange(edges, .data$Identity)
     colnames(lookup)[1] <- "Parent"
     edges <- left_join(edges, lookup, by = "Parent")
     edges$Parent <- edges$Age
-    edges <- select_(edges, ~-Age)
+    edges <- select(edges, -"Age")
     
     # get the path:
-    path <- path_vector(edges)
+    path <- path_vector_new(edges)$path
     path <- rev(path) # apparently, the convention for Muller plots to have earliest-arriving genotypes plotted nearest the top
     
     # replace each Age in the path with corresponding genotype name:
@@ -534,7 +641,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
   
   # the following adjusts for ggplot2 v.2.2.0, which (unlike v.2.1.0) stacks areas in order of their factor levels
   Muller_df$Group_id <- factor(Muller_df$Group_id, levels = rev(
-    unlist(as.data.frame(Muller_df %>% filter_(~Generation == max(Generation)) %>% select_(~Group_id)), use.names=FALSE)
+    unlist(as.data.frame(Muller_df %>% filter(.data$Generation == max(.data$Generation)) %>% select("Group_id")), use.names=FALSE)
   ))
   
   # restore original time column name:
@@ -578,7 +685,7 @@ get_Muller_df <- function(edges, pop_df, cutoff = 0, start_positions = 0.5, thre
 Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_legend = FALSE, xlab = NA, ylab = "Frequency", pop_plot = FALSE, conceal_edges = FALSE) {
   if(!pop_plot & "___special_empty" %in% Muller_df$Group_id) warning("Dataframe is set up for Muller_pop_plot. Use Muller_pop_plot to plot populations rather than frequencies.")
   
-  y_factor <- ifelse(pop_plot, "Population", "Frequency")
+  y_factor <- if (pop_plot) "Population" else "Frequency"
   if("Time" %in% colnames(Muller_df) && !("Generation" %in% colnames(Muller_df))) x_factor <- "Time"
   else x_factor <- "Generation"
   if(is.na(xlab)) xlab <- x_factor
@@ -600,13 +707,33 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
   # test whether palette is a vector of colours; if not then we'll assume it's the name of a predefined palette:
   palette_named <- !min(sapply(palette, function(X) tryCatch(is.matrix(col2rgb(X)), error = function(e) FALSE)))
   
-  if(conceal_edges) gg <- ggplot(Muller_df, aes_string(x = x_factor, y = y_factor, group = "Group_id", fill = colour_by, colour = colour_by))
-  else gg <- ggplot(Muller_df, aes_string(x = x_factor, y = y_factor, group = "Group_id", fill = colour_by))
+  if (conceal_edges) {
+    gg <- ggplot(
+      Muller_df,
+      aes(
+        x = .data[[x_factor]],
+        y = .data[[y_factor]],
+        group = .data[["Group_id"]],
+        fill = .data[[colour_by]],
+        colour = .data[[colour_by]]
+      )
+    )
+  } else {
+    gg <- ggplot(
+      Muller_df,
+      aes(
+        x = .data[[x_factor]],
+        y = .data[[y_factor]],
+        group = .data[["Group_id"]],
+        fill = .data[[colour_by]]
+      )
+    )
+  }
   
   gg <- gg + 
     geom_area() +
     theme(legend.position = ifelse(add_legend, "right", "none")) +
-    guides(linetype = FALSE, color = FALSE) + 
+    guides(linetype = "none", colour = "none") + 
     scale_x_continuous(name = xlab) + 
     scale_y_continuous(name = ylab)
   
@@ -622,7 +749,7 @@ Muller_plot <- function(Muller_df, colour_by = "Identity", palette = NA, add_leg
         scale_color_brewer(palette = palette)
     }
     else {
-      id_list <- sort(unique(select(Muller_df, colour_by))[[1]]) # list of legend entries, omitting NA
+      id_list <- sort(unique(Muller_df[[colour_by]])) # list of legend entries, omitting NA
       gg <- gg + 
         scale_fill_manual(values = palette, name = colour_by, breaks = id_list) + 
         scale_color_manual(values = palette)
@@ -695,43 +822,43 @@ add_empty_pop <- function(Muller_df) {
   }
   
   # get maximum total population:
-  totals <- Muller_df %>% group_by_(~Generation) %>% 
-    summarise_(tot = ~sum(Population)) %>% 
+  totals <- Muller_df %>% group_by(.data$Generation) %>%
+    summarise(tot = sum(.data$Population)) %>%
     ungroup
   max_tot <- max(totals$tot)
-  
+
   # avoid warning when Group_id is a factor:
   Muller_df$Group_id <- as.character(Muller_df$Group_id)
-  
+
   # add a new row at start of each Generation group:
   Muller_df <- Muller_df %>%
-    group_by_(~Generation) %>%
-    summarise_(Identity = ~NA, Population = ~-sum(Population)/2 + 1.1 * max_tot/2) %>%
-    mutate(Frequency = NA, 
-           Group_id = "___special_empty", 
-           Unique_id = paste0("___special_empty_", Generation)) %>% 
-    bind_rows(., Muller_df) %>% 
-    arrange_(~Generation) %>%
+    group_by(.data$Generation) %>%
+    summarise(Identity = NA, Population = -sum(.data$Population)/2 + 1.1 * max_tot/2) %>%
+    mutate(Frequency = NA,
+           Group_id = "___special_empty",
+           Unique_id = paste0("___special_empty_", .data$Generation)) %>%
+    bind_rows(., Muller_df) %>%
+    arrange(.data$Generation) %>%
     ungroup()
-  
+
   # add a new row at end of each Generation group:
   Muller_df <- Muller_df %>%
-    group_by_(~Generation) %>%
-    summarise_(Identity = ~NA, Population = ~first(Population)) %>%
-    mutate(Frequency = NA, 
-           Group_id = "___special_emptya", Unique_id = paste0("___special_emptya_", Generation)) %>% 
-    bind_rows(Muller_df, .) %>% 
-    arrange_(~Generation) %>%
+    group_by(.data$Generation) %>%
+    summarise(Identity = NA, Population = first(.data$Population)) %>%
+    mutate(Frequency = NA,
+           Group_id = "___special_emptya", Unique_id = paste0("___special_emptya_", .data$Generation)) %>%
+    bind_rows(Muller_df, .) %>%
+    arrange(.data$Generation) %>%
     ungroup()
-  
+
   # recalculate frequencies:
-  Muller_df <- Muller_df %>% group_by_(~Generation) %>% 
-    mutate(Frequency = Population / sum(Population)) %>%
+  Muller_df <- Muller_df %>% group_by(.data$Generation) %>%
+    mutate(Frequency = .data$Population / sum(.data$Population)) %>%
     ungroup()
-  
+
   # the following adjusts for ggplot2 v.2.2.0, which (unlike v.2.1.0) stacks areas in order of their factor levels
   Muller_df$Group_id <- factor(Muller_df$Group_id, levels = rev(
-    unlist(as.data.frame(Muller_df %>% filter_(~Generation == max(Generation)) %>% select_(~Group_id)), use.names=FALSE)
+    unlist(as.data.frame(Muller_df %>% filter(.data$Generation == max(.data$Generation)) %>% select("Group_id")), use.names=FALSE)
   ))
   
   # restore original time column name:
